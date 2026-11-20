@@ -61,15 +61,23 @@ jobs:
           cat > opencode.json <<'EOF'
           {
             "$schema": "https://opencode.ai/config.json",
-            "model": "opencode/big-pickle"
+            "model": "opencode/big-pickle",
+            "permissions": [
+              { "action": "external_directory", "resource": "/tmp/*", "effect": "allow" },
+              { "action": "read", "resource": "*", "effect": "allow" },
+              { "action": "edit", "resource": "*", "effect": "allow" },
+              { "action": "shell", "resource": "*", "effect": "allow" },
+              { "action": "webfetch", "resource": "*", "effect": "allow" },
+              { "action": "websearch", "resource": "*", "effect": "allow" }
+            ]
           }
           EOF
 
       - name: List brand-check targets
         run: |
           set -euo pipefail
-          python scripts/brand_targets.py --limit "${LIMIT}" > /tmp/brand-targets.json
-          echo "Brand checks required for $(python -c 'import json;print(len(json.load(open("/tmp/brand-targets.json"))))') companies"
+          python scripts/brand_targets.py --limit "${LIMIT}" > cache/brand-targets.json
+          echo "Brand checks required for $(python -c 'import json;print(len(json.load(open("cache/brand-targets.json"))))') companies"
 
       - name: Verify brands and APPLY fixes with OpenCode
         run: |
@@ -83,18 +91,21 @@ jobs:
           not invent any flag that suppresses writes.
 
           BRAND VERIFICATION IS MANDATORY AND COMES FIRST:
-          - The deterministic list of this batch is in /tmp/brand-targets.json:
+          - The deterministic list of this batch is in cache/brand-targets.json:
             CUI, live brand, legal company name and website for each company.
             Read it.
-          - For EVERY CUI in that list, use your web search / web fetch tools to verify
-            the brand against the legal name and the official website. Print one line
-            per company in the log: CUI | live brand | source URL | verdict.
+          - For EVERY CUI in that list, use webfetch on the official website URL
+            (and websearch too if a search provider is configured) to verify that the
+            brand belongs to this company. Print one line per company in the log:
+            CUI | live brand | source URL | verdict (ok / corrected).
           - If the live brand clearly belongs to a DIFFERENT company, add ONLY that
             correction to cache/brand-overrides.json BEFORE running the CLI.
           - Do not add speculative overrides. If all brands check out, leave the file
             untouched.
-          - If you cannot access the web, STOP now, do not run the CLI, and state
-            explicitly that brand verification failed. Never apply fixes without it.
+          - If webfetch fails for a company, try its website without www, its CUIFirma
+            page, or a search engine result page via webfetch. If you still cannot
+            access the web, STOP now, do not run the CLI, and state explicitly that
+            brand verification failed. Never apply fixes without it.
 
           THEN APPLY:
           - Run exactly this command:

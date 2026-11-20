@@ -78,8 +78,9 @@ runs the validator with **OpenCode** (`opencode/big-pickle`) driving the repo co
 - scheduled daily at 04:00 UTC, or manually via `workflow_dispatch` with `limit`
   (default `20`);
 - **every run writes fixes** — there is no dry-run input and no preview mode;
-- `scripts/brand_targets.py --limit <limit>` produces the read-only list of this
-  batch (CUI, live brand, legal name, website). OpenCode must web-verify the brand
+- `scripts/brand_targets.py --limit <limit>` writes the read-only list of this batch
+  to `cache/brand-targets.json` (CUI, live brand, legal name, website). OpenCode must
+  web-verify the brand
   of **every** company in that list and may add only clear corrections to
   `cache/brand-overrides.json`. If web access fails, the run stops before applying;
 - then it uses `--unprocessed --limit <limit> --workers 8` so each run advances to
