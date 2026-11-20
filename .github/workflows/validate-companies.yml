@@ -1,0 +1,135 @@
+name: Company Core Validator — 20 firme/run
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Câte firme neprocesate să valideze'
+        required: true
+        default: '20'
+        type: string
+      dry_run:
+        description: 'Doar validare, fără scriere în API'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: '0 4 * * *'   # zilnic 04:00 UTC
+
+concurrency:
+  group: company-core-validator
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Restore validator state
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache/results.json
+            cache/companies.json
+            cache/documents.json
+            cache/providers.json
+            cache/urls.json
+          key: company-core-validator-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: company-core-validator-state-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          npm install -g opencode-ai
+
+      - name: Write opencode config
+        run: |
+          cat > opencode.json <<'EOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "model": "opencode/big-pickle"
+          }
+          EOF
+
+      - name: Validate companies with OpenCode
+        env:
+          LIMIT: ${{ inputs.limit || '20' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          FLAGS="--unprocessed --limit ${LIMIT} --workers 8"
+          if [ "${DRY_RUN}" = "true" ]; then
+            FLAGS="${FLAGS} --dry-run"
+          fi
+
+          cat > /tmp/validator-prompt.txt <<PROMPT
+          You are running in GitHub Actions inside the peviitor-ro/company-core-validator
+          repository. Read AGENTS.md and README.md before doing anything.
+
+          TASK: validate the next ${LIMIT} unprocessed companies from the peviitor.ro
+          company core, using the code in this repository.
+
+          HARD RULES:
+          - Do not reimplement the validator. Use the CLI in this repo.
+          - Run exactly this command: python -m company_core_validator.cli run ${FLAGS}
+          - The CLI applies fixes directly. Use --dry-run only when DRY_RUN=true.
+          - cache/brand-overrides.json contains web-verified brand corrections and is
+            authoritative for brand. Do not edit it unless you have clear web evidence
+            that the live brand is wrong or belongs to a different company.
+          - If you have web search / fetch tools and a brand looks unrelated to the
+            legal name or website, verify it online and add only unambiguous corrections
+            to cache/brand-overrides.json BEFORE running the CLI.
+          - Never manually override company, status, location, website, career,
+            scraperFile or lastScraped. The validator and providers own those fields.
+          - Never use plain --limit N: it would reprocess the same first companies.
+            Always keep --unprocessed.
+          - If the command fails, keep cache/results.json intact and explain the error.
+
+          AFTER THE RUN:
+          - Read cache/report.json and print scannedThisRun and summary.
+          - Print a short markdown table with the CUI, company name and changed fields
+            for the companies scanned in THIS run only.
+          - Read back 2-3 applied companies from https://api.peviitor.ro/v1/firme/company/
+            to confirm the changes landed (allow a short delay for eventual consistency).
+          PROMPT
+
+          opencode run "$(cat /tmp/validator-prompt.txt)"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report-${{ github.run_number }}
+          path: |
+            cache/report.json
+            cache/brand-overrides.json
+          if-no-files-found: warn
+
+      - name: Print summary
+        if: always()
+        run: |
+          if [ -f cache/report.json ]; then
+            python - <<'PY'
+          import json
+          report = json.load(open("cache/report.json", encoding="utf-8"))
+          print("scannedThisRun:", report.get("scannedThisRun"))
+          print("summary:", json.dumps(report.get("summary"), ensure_ascii=False))
+          PY
+          fi

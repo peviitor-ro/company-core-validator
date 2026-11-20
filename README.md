@@ -71,6 +71,22 @@ with a JSON cache and 429/5xx backoff. CUIFirma advertises a 60-request limit;
 CUIScan caches responses for 180 seconds. A full 18k-company enrichment is
 therefore slow by design.
 
+## GitHub Actions
+
+[`.github/workflows/validate-companies.yml`](.github/workflows/validate-companies.yml)
+runs the validator with **OpenCode** (`opencode/big-pickle`) driving the repo code:
+
+- scheduled daily at 04:00 UTC, or manually via `workflow_dispatch`;
+- manual inputs: `limit` (default `20`) and `dry_run` (default `false`);
+- uses `--unprocessed --limit <limit> --workers 8` so each run advances to the next
+  batch instead of reprocessing the first companies;
+- restores `cache/results.json` and the technical caches through `actions/cache`
+  (rolling key per run) and uploads `cache/report.json` as an artifact.
+
+OpenCode reads [`AGENTS.md`](AGENTS.md) first. It may add a web-verified brand to
+`cache/brand-overrides.json` before the run, but it must not hand-edit any other
+company field.
+
 ## Report
 
 `cache/report.json` contains one entry per scanned company: validation issues,
