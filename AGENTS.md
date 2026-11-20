@@ -24,10 +24,12 @@ prin CUI (`id`).
 4. **Verificarea web a brandului e OBLIGATORIE la fiecare rulare**, pentru fiecare firmă
    din batch, înainte de comanda de aplicare. Nu e opțională și nu depinde de „dacă ai
    unelte web”. Pași:
-   - rulează `python scripts/brand_targets.py --limit 20 > /tmp/brand-targets.json`
+   - rulează `python scripts/brand_targets.py --limit 20 > cache/brand-targets.json`
      pentru lista CUIs + brand live + nume legal + website;
-   - pentru **fiecare** CUI caută brandul pe web (site oficial, CUIFirma, motor de
-     căutare) și notează în log: `CUI | brand live | sursa verificată | verdict`;
+   - rulează `python scripts/brand_verify.py` — colectează paralel dovezi web (site
+     oficial + CUIFirma) în `cache/brand-checks.json`, cu flag `review`;
+   - verifică **fiecare** rând cu `review: true` prin webfetch pe sursa indicată și
+     notează în log: `CUI | brand live | sursa verificată | verdict`;
    - dacă brandul live aparține clar altei firme, adaugă corecția în
      `cache/brand-overrides.json` (JSON: `"CUI": "brand"`) înainte de `run`;
    - override-ul are prioritate față de provider. Nu adăuga corecții speculative.

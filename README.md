@@ -79,10 +79,11 @@ runs the validator with **OpenCode** (`opencode/big-pickle`) driving the repo co
   (default `20`);
 - **every run writes fixes** — there is no dry-run input and no preview mode;
 - `scripts/brand_targets.py --limit <limit>` writes the read-only list of this batch
-  to `cache/brand-targets.json` (CUI, live brand, legal name, website). OpenCode must
-  web-verify the brand
-  of **every** company in that list and may add only clear corrections to
-  `cache/brand-overrides.json`. If web access fails, the run stops before applying;
+  to `cache/brand-targets.json` (CUI, live brand, legal name, website), then
+  `scripts/brand_verify.py` collects web evidence in parallel into
+  `cache/brand-checks.json`. OpenCode reviews every `review: true` row via webfetch
+  and may add only clear corrections to `cache/brand-overrides.json`. If no web
+  evidence at all can be collected, the run stops before applying;
 - then it uses `--unprocessed --limit <limit> --workers 8` so each run advances to
   the next batch instead of reprocessing the first companies;
 - restores `cache/results.json` and the technical caches through `actions/cache`

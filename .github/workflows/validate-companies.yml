@@ -18,7 +18,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 180
 
     env:
       LIMIT: ${{ inputs.limit || '20' }}
@@ -71,6 +71,9 @@ jobs:
           python scripts/brand_targets.py --limit "${LIMIT}" > cache/brand-targets.json
           echo "Brand checks required for $(python -c 'import json;print(len(json.load(open("cache/brand-targets.json"))))') companies"
 
+      - name: Collect web evidence for brands
+        run: python scripts/brand_verify.py
+
       - name: Verify brands and APPLY fixes with OpenCode
         run: |
           set -euo pipefail
@@ -83,21 +86,22 @@ jobs:
           not invent any flag that suppresses writes.
 
           BRAND VERIFICATION IS MANDATORY AND COMES FIRST:
-          - The deterministic list of this batch is in cache/brand-targets.json:
-            CUI, live brand, legal company name and website for each company.
-            Read it.
-          - For EVERY CUI in that list, use webfetch on the official website URL
-            (and websearch too if a search provider is configured) to verify that the
-            brand belongs to this company. Print one line per company in the log:
+          - cache/brand-targets.json is the deterministic list of this batch.
+          - cache/brand-checks.json already contains the web evidence collected in
+            parallel by scripts/brand_verify.py: official website title/snippet,
+            CUIFirma name, and a "review" flag. Read it.
+          - Review EVERY row with "review": true. Use webfetch on the source URL for
+            each of those companies and confirm whether the brand belongs to that
+            legal entity. Print one line per reviewed company:
             CUI | live brand | source URL | verdict (ok / corrected).
           - If the live brand clearly belongs to a DIFFERENT company, add ONLY that
             correction to cache/brand-overrides.json BEFORE running the CLI.
-          - Do not add speculative overrides. If all brands check out, leave the file
-            untouched.
-          - If webfetch fails for a company, try its website without www, its CUIFirma
-            page, or a search engine result page via webfetch. If you still cannot
-            access the web, STOP now, do not run the CLI, and state explicitly that
-            brand verification failed. Never apply fixes without it.
+          - Do not add speculative overrides. A different legal suffix or a missing
+            brand token on a homepage is NOT proof. If all checked brands check out,
+            leave the file untouched.
+          - If no web evidence at all could be collected, STOP now, do not run the CLI,
+            and state explicitly that brand verification failed. Never apply fixes
+            without it.
 
           THEN APPLY:
           - Run exactly this command:
