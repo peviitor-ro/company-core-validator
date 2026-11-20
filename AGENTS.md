@@ -18,12 +18,21 @@ prin CUI (`id`).
 2. **Folosește `--unprocessed`.** Nu folosi `--limit N` simplu: ar revalidat primele N
    firme din listă la fiecare run. `--unprocessed` selectează firmele fără intrare în
    `cache/results.json`.
-3. **Scrierea e default.** `run` aplică direct. `--dry-run` doar dacă se cere explicit;
-   `--apply` e deprecated.
-4. **Brandul e singurul câmp verificat web.** Corecțiile aprobate stau în
-   `cache/brand-overrides.json` (JSON: `"CUI": "brand"`) și au prioritate față de
-   provider. Adaugă acolo **doar** când există dovadă clară că brandul live e altul
-   (site oficial, denumire legală, altă firmă cu acel brand).
+3. **Scrierea e singurul mod.** `run` aplică întotdeauna. Nu există `--dry-run` și nici
+   `--apply`; ambele au fost șterse din cod. Fiecare rulare GitHub Actions scrie și
+   repară companiile pe bune.
+4. **Verificarea web a brandului e OBLIGATORIE la fiecare rulare**, pentru fiecare firmă
+   din batch, înainte de comanda de aplicare. Nu e opțională și nu depinde de „dacă ai
+   unelte web”. Pași:
+   - rulează `python scripts/brand_targets.py --limit 20 > /tmp/brand-targets.json`
+     pentru lista CUIs + brand live + nume legal + website;
+   - pentru **fiecare** CUI caută brandul pe web (site oficial, CUIFirma, motor de
+     căutare) și notează în log: `CUI | brand live | sursa verificată | verdict`;
+   - dacă brandul live aparține clar altei firme, adaugă corecția în
+     `cache/brand-overrides.json` (JSON: `"CUI": "brand"`) înainte de `run`;
+   - override-ul are prioritate față de provider. Nu adăuga corecții speculative.
+   - dacă nu poți accesa webul, **oprește-te înainte de `run`** și spune explicit că
+     verificarea brandului a eșuat. Nu aplica nimic fără ea.
 5. **Nu suprascrie manual** `company`, `status`, `location`, `website`, `career`,
    `scraperFile` sau `lastScraped`. Le gestionează validatorul și providerii.
 6. **Actualizare live e eventual consistentă.** După un PUT, o citire imediată poate

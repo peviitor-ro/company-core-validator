@@ -59,11 +59,6 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest="command")
     run_parser = subparsers.add_parser("run", help="validate and optionally fix company documents")
     run_parser.add_argument("--limit", type=int, default=20, help="0 validates every company")
-    run_parser.add_argument(
-        "--dry-run", action="store_true",
-        help="validate without writing fixes (default is to apply fixes directly)")
-    run_parser.add_argument(
-        "--apply", action="store_true", help=argparse.SUPPRESS)  # deprecated: apply is now default
     run_parser.add_argument("--refresh", action="store_true", help="ignore cached documents and company list")
     run_parser.add_argument(
         "--pending", action="store_true",
@@ -82,11 +77,8 @@ def main(argv=None):
     if args.command != "run":
         parser.print_help()
         return
-    if args.dry_run and args.apply:
-        run_parser.error("--dry-run and --apply are mutually exclusive")
     if args.pending and args.unprocessed:
         run_parser.error("--pending and --unprocessed are mutually exclusive")
-    args.apply = not args.dry_run
 
     api = PeviitorAPI()
     list_store = JsonStore(args.cache_dir / "companies.json")
@@ -135,7 +127,7 @@ def main(argv=None):
         print(f"Unprocessed fixes: {len(targets)}")
     else:
         targets = companies if args.limit <= 0 else companies[:args.limit]
-    print(f"Scanning: {len(targets)} ({'APPLY' if args.apply else 'dry run'})")
+    print(f"Scanning: {len(targets)} (APPLY)")
 
     def load(company):
         cif = str(company.get("id") or "")
@@ -196,7 +188,7 @@ def main(argv=None):
                 scraper_file_value, brand_overrides.get(cif))
             entry["changes"] = changes
             entry["status"] = "changed" if changes else "unfixable"
-            if changes and args.apply:
+            if changes:
                 try:
                     api.upsert_company(payload)
                     entry["applied"] = True
@@ -210,7 +202,7 @@ def main(argv=None):
     entries = list(result_store.data.values())
     report = {
         "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "apply": args.apply,
+        "apply": True,
         "scannedThisRun": len(targets),
         "cachedResults": len(entries),
         "summary": {

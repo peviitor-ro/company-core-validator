@@ -50,7 +50,6 @@ python3 -m venv .venv
 .venv/bin/python -m company_core_validator.cli run --limit 0
 .venv/bin/python -m company_core_validator.cli run --pending --limit 20
 .venv/bin/python -m company_core_validator.cli run --unprocessed --limit 50
-.venv/bin/python -m company_core_validator.cli run --unprocessed --limit 50 --dry-run
 ```
 
 `--pending` re-applies fixes to companies that were already validated but whose
@@ -62,9 +61,9 @@ Web-verified brand corrections live in `cache/brand-overrides.json` (a simple
 CUI → brand map). Overrides are applied only when the web evidence clearly
 contradicts the live brand; all other fields are still fixed by the validator.
 
-`run` applies fixes directly by default; pass `--dry-run` to preview changes
-without writing them. Provider answers and company documents are cached in
-`cache/`, so a later full run resumes without repeating expensive lookups.
+`run` always applies fixes — there is no preview mode, and no `--apply` flag.
+Provider answers and company documents are cached in `cache/`, so a later full
+run resumes without repeating expensive lookups.
 
 Rate limiting is conservative: one request per second per provider by default,
 with a JSON cache and 429/5xx backoff. CUIFirma advertises a 60-request limit;
@@ -76,16 +75,20 @@ therefore slow by design.
 [`.github/workflows/validate-companies.yml`](.github/workflows/validate-companies.yml)
 runs the validator with **OpenCode** (`opencode/big-pickle`) driving the repo code:
 
-- scheduled daily at 04:00 UTC, or manually via `workflow_dispatch`;
-- manual inputs: `limit` (default `20`) and `dry_run` (default `false`);
-- uses `--unprocessed --limit <limit> --workers 8` so each run advances to the next
-  batch instead of reprocessing the first companies;
+- scheduled daily at 04:00 UTC, or manually via `workflow_dispatch` with `limit`
+  (default `20`);
+- **every run writes fixes** — there is no dry-run input and no preview mode;
+- `scripts/brand_targets.py --limit <limit>` produces the read-only list of this
+  batch (CUI, live brand, legal name, website). OpenCode must web-verify the brand
+  of **every** company in that list and may add only clear corrections to
+  `cache/brand-overrides.json`. If web access fails, the run stops before applying;
+- then it uses `--unprocessed --limit <limit> --workers 8` so each run advances to
+  the next batch instead of reprocessing the first companies;
 - restores `cache/results.json` and the technical caches through `actions/cache`
   (rolling key per run) and uploads `cache/report.json` as an artifact.
 
-OpenCode reads [`AGENTS.md`](AGENTS.md) first. It may add a web-verified brand to
-`cache/brand-overrides.json` before the run, but it must not hand-edit any other
-company field.
+OpenCode reads [`AGENTS.md`](AGENTS.md) first and never hand-edits `company`,
+`status`, `location`, `website`, `career`, `scraperFile` or `lastScraped`.
 
 ## Report
 

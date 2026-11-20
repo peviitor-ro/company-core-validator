@@ -8,11 +8,6 @@ on:
         required: true
         default: '20'
         type: string
-      dry_run:
-        description: 'Doar validare, fără scriere în API'
-        required: false
-        default: false
-        type: boolean
   schedule:
     - cron: '0 4 * * *'   # zilnic 04:00 UTC
 
@@ -23,7 +18,10 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+
+    env:
+      LIMIT: ${{ inputs.limit || '20' }}
 
     steps:
       - name: Checkout
@@ -67,47 +65,52 @@ jobs:
           }
           EOF
 
-      - name: Validate companies with OpenCode
-        env:
-          LIMIT: ${{ inputs.limit || '20' }}
-          DRY_RUN: ${{ inputs.dry_run }}
+      - name: List brand-check targets
         run: |
           set -euo pipefail
+          python scripts/brand_targets.py --limit "${LIMIT}" > /tmp/brand-targets.json
+          echo "Brand checks required for $(python -c 'import json;print(len(json.load(open("/tmp/brand-targets.json"))))') companies"
 
-          FLAGS="--unprocessed --limit ${LIMIT} --workers 8"
-          if [ "${DRY_RUN}" = "true" ]; then
-            FLAGS="${FLAGS} --dry-run"
-          fi
+      - name: Verify brands and APPLY fixes with OpenCode
+        run: |
+          set -euo pipefail
 
           cat > /tmp/validator-prompt.txt <<PROMPT
           You are running in GitHub Actions inside the peviitor-ro/company-core-validator
           repository. Read AGENTS.md and README.md before doing anything.
 
-          TASK: validate the next ${LIMIT} unprocessed companies from the peviitor.ro
-          company core, using the code in this repository.
+          THIS RUN MUST WRITE FIXES TO THE API. There is no dry-run mode and you must
+          not invent any flag that suppresses writes.
 
-          HARD RULES:
-          - Do not reimplement the validator. Use the CLI in this repo.
-          - Run exactly this command: python -m company_core_validator.cli run ${FLAGS}
-          - The CLI applies fixes directly. Use --dry-run only when DRY_RUN=true.
-          - cache/brand-overrides.json contains web-verified brand corrections and is
-            authoritative for brand. Do not edit it unless you have clear web evidence
-            that the live brand is wrong or belongs to a different company.
-          - If you have web search / fetch tools and a brand looks unrelated to the
-            legal name or website, verify it online and add only unambiguous corrections
-            to cache/brand-overrides.json BEFORE running the CLI.
+          BRAND VERIFICATION IS MANDATORY AND COMES FIRST:
+          - The deterministic list of this batch is in /tmp/brand-targets.json:
+            CUI, live brand, legal company name and website for each company.
+            Read it.
+          - For EVERY CUI in that list, use your web search / web fetch tools to verify
+            the brand against the legal name and the official website. Print one line
+            per company in the log: CUI | live brand | source URL | verdict.
+          - If the live brand clearly belongs to a DIFFERENT company, add ONLY that
+            correction to cache/brand-overrides.json BEFORE running the CLI.
+          - Do not add speculative overrides. If all brands check out, leave the file
+            untouched.
+          - If you cannot access the web, STOP now, do not run the CLI, and state
+            explicitly that brand verification failed. Never apply fixes without it.
+
+          THEN APPLY:
+          - Run exactly this command:
+            python -m company_core_validator.cli run --unprocessed --limit ${LIMIT} --workers 8
+          - The CLI always applies changes. Never add --dry-run, --apply or any other
+            write-suppressing flag; those options do not exist.
           - Never manually override company, status, location, website, career,
             scraperFile or lastScraped. The validator and providers own those fields.
-          - Never use plain --limit N: it would reprocess the same first companies.
-            Always keep --unprocessed.
-          - If the command fails, keep cache/results.json intact and explain the error.
+          - If the command fails, report the error and keep cache/results.json intact.
 
           AFTER THE RUN:
           - Read cache/report.json and print scannedThisRun and summary.
           - Print a short markdown table with the CUI, company name and changed fields
             for the companies scanned in THIS run only.
           - Read back 2-3 applied companies from https://api.peviitor.ro/v1/firme/company/
-            to confirm the changes landed (allow a short delay for eventual consistency).
+            to confirm the fixes landed (allow a short delay for eventual consistency).
           PROMPT
 
           opencode run "$(cat /tmp/validator-prompt.txt)"
