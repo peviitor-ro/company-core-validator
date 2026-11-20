@@ -61,15 +61,7 @@ jobs:
           cat > opencode.json <<'EOF'
           {
             "$schema": "https://opencode.ai/config.json",
-            "model": "opencode/big-pickle",
-            "permissions": [
-              { "action": "external_directory", "resource": "/tmp/*", "effect": "allow" },
-              { "action": "read", "resource": "*", "effect": "allow" },
-              { "action": "edit", "resource": "*", "effect": "allow" },
-              { "action": "shell", "resource": "*", "effect": "allow" },
-              { "action": "webfetch", "resource": "*", "effect": "allow" },
-              { "action": "websearch", "resource": "*", "effect": "allow" }
-            ]
+            "model": "opencode/big-pickle"
           }
           EOF
 
